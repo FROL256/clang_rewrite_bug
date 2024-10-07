@@ -34,7 +34,7 @@ using namespace clang;
 // we're interested in by overriding relevant methods.
 class MyASTVisitor : public RecursiveASTVisitor<MyASTVisitor> {
 public:
-  MyASTVisitor(Rewriter &R) : TheRewriter(R) {}
+  MyASTVisitor(Rewriter &R) : m_rewriter(R) {}
 
   bool VisitStmt(Stmt *s) {
     // Only care about If statements.
@@ -42,12 +42,12 @@ public:
       IfStmt *IfStatement = cast<IfStmt>(s);
       Stmt *Then = IfStatement->getThen();
 
-      TheRewriter.InsertText(Then->getBeginLoc(), "// the 'if' part\n", true,
+      m_rewriter.InsertText(Then->getBeginLoc(), "// the 'if' part\n", true,
                              true);
 
       Stmt *Else = IfStatement->getElse();
       if (Else)
-        TheRewriter.InsertText(Else->getBeginLoc(), "// the 'else' part\n",
+        m_rewriter.InsertText(Else->getBeginLoc(), "// the 'else' part\n",
                                true, true);
     }
 
@@ -72,20 +72,20 @@ public:
       SSBefore << "// Begin function " << FuncName << " returning " << TypeStr
                << "\n";
       SourceLocation ST = f->getSourceRange().getBegin();
-      TheRewriter.InsertText(ST, SSBefore.str(), true, true);
+      m_rewriter.InsertText(ST, SSBefore.str(), true, true);
 
       // And after
       std::stringstream SSAfter;
       SSAfter << "\n// End function " << FuncName;
       ST = FuncBody->getEndLoc().getLocWithOffset(1);
-      TheRewriter.InsertText(ST, SSAfter.str(), true, true);
+      m_rewriter.InsertText(ST, SSAfter.str(), true, true);
     }
 
     return true;
   }
 
 private:
-  Rewriter &TheRewriter;
+  Rewriter& m_rewriter;
 };
 
 // Implementation of the ASTConsumer interface for reading an AST produced
@@ -107,12 +107,8 @@ private:
   MyASTVisitor Visitor;
 };
 
-int main(int argc, char *argv[]) {
-  if (argc != 2) {
-    llvm::errs() << "Usage: rewritersample <filename>\n";
-    return 1;
-  }
-
+int main(int argc, char *argv[]) 
+{
   // CompilerInstance will hold the instance of the Clang compiler for us,
   // managing the various objects needed to run the compiler.
   CompilerInstance compiler;
@@ -134,6 +130,7 @@ int main(int argc, char *argv[]) {
     compiler.getLangOpts().RTTI        = 1;
     compiler.getLangOpts().Bool        = 1;
     compiler.getLangOpts().CPlusPlus   = 1;
+    compiler.getLangOpts().CPlusPlus11 = 1;
     compiler.getLangOpts().CPlusPlus14 = 1;
     compiler.getLangOpts().CPlusPlus17 = 1;
   }
@@ -150,7 +147,7 @@ int main(int argc, char *argv[]) {
   TheRewriter.setSourceMgr(SourceMgr, compiler.getLangOpts());
 
   // Set the main file handled by the source manager to the input file.
-  auto fileOrErr = FileMgr.getFile(argv[1]);
+  auto fileOrErr = FileMgr.getFile(argv[1], "-std=c++11");
 
   if (std::error_code ec = fileOrErr.getError()) 
   {
@@ -158,7 +155,7 @@ int main(int argc, char *argv[]) {
     return 0;
   }
 
-  const FileEntry* FileIn = *fileOrErr; //FileMgr.getFile(argv[1]);
+  const FileEntry* FileIn = *fileOrErr;
   SourceMgr.setMainFileID(SourceMgr.createFileID(FileIn, SourceLocation(), SrcMgr::C_User));
   compiler.getDiagnosticClient().BeginSourceFile(compiler.getLangOpts(), &compiler.getPreprocessor());
 
