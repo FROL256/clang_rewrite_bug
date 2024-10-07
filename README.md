@@ -1,2 +1,2 @@
 # clang_rewrite_bug
-Simple rewrite exmple to reprocude clang internal bugs
+Simple rewrite example to reprocude clang internal bugs

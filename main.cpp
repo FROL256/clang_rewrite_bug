@@ -115,29 +115,39 @@ int main(int argc, char *argv[]) {
 
   // CompilerInstance will hold the instance of the Clang compiler for us,
   // managing the various objects needed to run the compiler.
-  CompilerInstance TheCompInst;
-  TheCompInst.createDiagnostics();
+  CompilerInstance compiler;
+  compiler.createDiagnostics();
 
-  LangOptions &lo = TheCompInst.getLangOpts();
+  LangOptions &lo = compiler.getLangOpts();
   lo.CPlusPlus = 1;
 
   // Initialize target info with the default triple for our platform.
   auto TO = std::make_shared<TargetOptions>();
   TO->Triple = llvm::sys::getDefaultTargetTriple();
   TargetInfo *TI =
-      TargetInfo::CreateTargetInfo(TheCompInst.getDiagnostics(), TO);
-  TheCompInst.setTarget(TI);
+      TargetInfo::CreateTargetInfo(compiler.getDiagnostics(), TO);
+  compiler.setTarget(TI);
+  
+  {
+    compiler.getLangOpts().GNUMode = 1;
+    compiler.getLangOpts().CXXExceptions = 1;
+    compiler.getLangOpts().RTTI        = 1;
+    compiler.getLangOpts().Bool        = 1;
+    compiler.getLangOpts().CPlusPlus   = 1;
+    compiler.getLangOpts().CPlusPlus14 = 1;
+    compiler.getLangOpts().CPlusPlus17 = 1;
+  }
 
-  TheCompInst.createFileManager();
-  FileManager &FileMgr = TheCompInst.getFileManager();
-  TheCompInst.createSourceManager(FileMgr);
-  SourceManager &SourceMgr = TheCompInst.getSourceManager();
-  TheCompInst.createPreprocessor(TU_Module);
-  TheCompInst.createASTContext();
+  compiler.createFileManager();
+  FileManager &FileMgr = compiler.getFileManager();
+  compiler.createSourceManager(FileMgr);
+  SourceManager &SourceMgr = compiler.getSourceManager();
+  compiler.createPreprocessor(TU_Module);
+  compiler.createASTContext();
 
   // A Rewriter helps us manage the code rewriting task.
   Rewriter TheRewriter;
-  TheRewriter.setSourceMgr(SourceMgr, TheCompInst.getLangOpts());
+  TheRewriter.setSourceMgr(SourceMgr, compiler.getLangOpts());
 
   // Set the main file handled by the source manager to the input file.
   auto fileOrErr = FileMgr.getFile(argv[1]);
@@ -150,16 +160,15 @@ int main(int argc, char *argv[]) {
 
   const FileEntry* FileIn = *fileOrErr; //FileMgr.getFile(argv[1]);
   SourceMgr.setMainFileID(SourceMgr.createFileID(FileIn, SourceLocation(), SrcMgr::C_User));
-  TheCompInst.getDiagnosticClient().BeginSourceFile(
-      TheCompInst.getLangOpts(), &TheCompInst.getPreprocessor());
+  compiler.getDiagnosticClient().BeginSourceFile(compiler.getLangOpts(), &compiler.getPreprocessor());
 
   // Create an AST consumer instance which is going to get called by
   // ParseAST.
   MyASTConsumer TheConsumer(TheRewriter);
 
   // Parse the file to AST, registering our consumer as the AST consumer.
-  ParseAST(TheCompInst.getPreprocessor(), &TheConsumer,
-           TheCompInst.getASTContext());
+  ParseAST(compiler.getPreprocessor(), &TheConsumer,
+           compiler.getASTContext());
 
   // At this point the rewriter's buffer should be full with the rewritten
   // file contents.

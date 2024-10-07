@@ -11,7 +11,7 @@
             "type"   : "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/cmake-build-debug/rtest",
-            "args"   : ["input/test1.c"],
+            "args"   : ["input/test1.cpp"],
             "stopAtEntry"    : false,
             "cwd"            : "${workspaceFolder}",
             "environment"    : [],
