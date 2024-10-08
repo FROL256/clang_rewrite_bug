@@ -12,6 +12,7 @@
 #include <sstream>
 #include <string>
 #include <iostream>
+#include <unordered_set>
 
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/RecursiveASTVisitor.h"
@@ -30,55 +31,81 @@
 
 using namespace clang;
 
+const clang::SourceManager* g_pSM = nullptr;
+
+std::string GetOriginalText(const clang::SourceRange a_range)
+{
+  const clang::SourceManager& sm = *g_pSM;
+  clang::LangOptions lopt;
+  clang::SourceLocation b(a_range.getBegin()), _e(a_range.getEnd());
+  clang::SourceLocation e(clang::Lexer::getLocForEndOfToken(_e, 0, sm, lopt));
+  return std::string(sm.getCharacterData(b), sm.getCharacterData(e));
+}
+
+uint64_t GetHashOfSourceRange(const clang::SourceRange& a_range)
+{
+  const uint32_t hash1 = a_range.getBegin().getRawEncoding();
+  const uint32_t hash2 = a_range.getEnd().getRawEncoding();
+  return (uint64_t(hash1) << 32) | uint64_t(hash2);
+}
+
+const clang::Expr* RemoveImplicitCast(const clang::Expr* nextNode)
+{
+  if(nextNode == nullptr)
+    return nullptr;
+  while(clang::isa<clang::ImplicitCastExpr>(nextNode))
+  {
+    auto cast = dyn_cast<clang::ImplicitCastExpr>(nextNode);
+    nextNode  = cast->getSubExpr();
+  }
+  return nextNode;
+}
+
 // By implementing RecursiveASTVisitor, we can specify which AST nodes
 // we're interested in by overriding relevant methods.
 class MyASTVisitor : public RecursiveASTVisitor<MyASTVisitor> {
 public:
   MyASTVisitor(Rewriter &R) : m_rewriter(R) {}
-
-  bool VisitStmt(Stmt *s) {
-    // Only care about If statements.
-    if (isa<IfStmt>(s)) {
-      IfStmt *IfStatement = cast<IfStmt>(s);
-      Stmt *Then = IfStatement->getThen();
-
-      m_rewriter.InsertText(Then->getBeginLoc(), "// the 'if' part\n", true,
-                             true);
-
-      Stmt *Else = IfStatement->getElse();
-      if (Else)
-        m_rewriter.InsertText(Else->getBeginLoc(), "// the 'else' part\n",
-                               true, true);
-    }
-
-    return true;
+  
+  std::string RecursiveRewrite(const clang::Stmt* expr)
+  {
+    if(expr == nullptr)
+      return "";
+    MyASTVisitor rvCopy = *this;
+    rvCopy.TraverseStmt(const_cast<clang::Stmt*>(expr));
+    return m_rewriter.getRewrittenText(expr->getSourceRange());
   }
 
-  bool VisitFunctionDecl(FunctionDecl *f) {
-    // Only function definitions (with bodies), not declarations.
-    if (f->hasBody()) {
-      Stmt *FuncBody = f->getBody();
+  bool VisitCXXOperatorCallExpr(clang::CXXOperatorCallExpr* node)
+  {
+    static std::unordered_map<std::string, std::string> remapOp = {{"+","add"}, {"-","sub"}, {"*","mul"}, {"/","div"}};
 
-      // Type name as string
-      QualType QT = f->getReturnType();
-      std::string TypeStr = QT.getAsString();
+    auto opKind = node->getOperator();
+    const std::string op = clang::getOperatorSpelling(opKind);
+    if((op == "+" || op == "-" || op == "*" || op == "/") && WasNotRewrittenYet(node->getSourceRange()))
+    {
+      const clang::Expr* left  = RemoveImplicitCast(node->getArg(0));
+      const clang::Expr* right = RemoveImplicitCast(node->getArg(1));
 
-      // Function name
-      DeclarationName DeclName = f->getNameInfo().getName();
-      std::string FuncName = DeclName.getAsString();
+      const std::string leftType  = left->getType().getAsString();
+      const std::string rightType = right->getType().getAsString();
+      const std::string keyType   = "complex"; 
+      
+      const std::string leftText  = RecursiveRewrite(left);
+      const std::string rightText = RecursiveRewrite(right);
 
-      // Add comment before
-      std::stringstream SSBefore;
-      SSBefore << "// Begin function " << FuncName << " returning " << TypeStr
-               << "\n";
-      SourceLocation ST = f->getSourceRange().getBegin();
-      m_rewriter.InsertText(ST, SSBefore.str(), true, true);
+      std::string rewrittenOp;
+      {
+        if(leftType == keyType && rightType == keyType)
+          rewrittenOp = keyType + "_" + remapOp[op] + "(" + leftText + "," + rightText + ")";
+        else if (leftType == keyType)
+          rewrittenOp = keyType + "_" + remapOp[op] + "_real(" + leftText + "," + rightText + ")";
+        else if(rightType == keyType)
+          rewrittenOp =  "real_" + remapOp[op] + "_" + keyType + "(" + leftText + "," + rightText + ")";
+      }
 
-      // And after
-      std::stringstream SSAfter;
-      SSAfter << "\n// End function " << FuncName;
-      ST = FuncBody->getEndLoc().getLocWithOffset(1);
-      m_rewriter.InsertText(ST, SSAfter.str(), true, true);
+      m_rewriter.ReplaceText(node->getSourceRange(), rewrittenOp);
+      MarkRewritten(node->getSourceRange());
     }
 
     return true;
@@ -86,6 +113,17 @@ public:
 
 private:
   Rewriter& m_rewriter;
+  std::unordered_set<uint64_t> m_rewrittenNodes;
+
+  bool WasNotRewrittenYet(const clang::SourceRange a_range) 
+  { 
+    return (m_rewrittenNodes.find(GetHashOfSourceRange(a_range)) == m_rewrittenNodes.end()); 
+  }
+
+  void  MarkRewritten(const clang::SourceRange a_range)
+  {
+    m_rewrittenNodes.insert(GetHashOfSourceRange(a_range));
+  }
 };
 
 // Implementation of the ASTConsumer interface for reading an AST produced
@@ -120,8 +158,7 @@ int main(int argc, char *argv[])
   // Initialize target info with the default triple for our platform.
   auto TO = std::make_shared<TargetOptions>();
   TO->Triple = llvm::sys::getDefaultTargetTriple();
-  TargetInfo *TI =
-      TargetInfo::CreateTargetInfo(compiler.getDiagnostics(), TO);
+  TargetInfo *TI = TargetInfo::CreateTargetInfo(compiler.getDiagnostics(), TO);
   compiler.setTarget(TI);
   
   {
@@ -136,9 +173,11 @@ int main(int argc, char *argv[])
   }
 
   compiler.createFileManager();
-  FileManager &FileMgr = compiler.getFileManager();
+  FileManager& FileMgr = compiler.getFileManager();
   compiler.createSourceManager(FileMgr);
-  SourceManager &SourceMgr = compiler.getSourceManager();
+  SourceManager& SourceMgr = compiler.getSourceManager();
+  g_pSM = &SourceMgr;
+
   compiler.createPreprocessor(TU_Module);
   compiler.createASTContext();
 
