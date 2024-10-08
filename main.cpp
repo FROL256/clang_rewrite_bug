@@ -136,19 +136,20 @@ public:
     return true;
   }
 
-  //bool VisitCXXConstructExpr(CXXConstructExpr* call)
-  //{
-  //  const clang::CXXConstructorDecl* ctorDecl = call->getConstructor();
-  //  const std::string fname = ctorDecl->getNameInfo().getName().getAsString();
-  //  
-  //  if(WasNotRewrittenYet(call->getSourceRange()))
-  //  {
-  //    std::string textRes = "to_complex" + FunctionCallRewriteNoName(call); 
-  //    m_rewriter.ReplaceText(call->getSourceRange(), textRes);
-  //    MarkRewritten(call);
-  //  }
-  //  return true;
-  //}
+  bool VisitCXXConstructExpr(CXXConstructExpr* call)
+  {
+    //call->dump();
+    const clang::CXXConstructorDecl* ctorDecl = call->getConstructor();
+    const std::string fname = ctorDecl->getNameInfo().getName().getAsString();
+    
+    if(WasNotRewrittenYet(call->getSourceRange()))
+    {
+      std::string textRes = "to_complex" + FunctionCallRewriteNoName(call); 
+      m_rewriter.ReplaceText(call->getSourceRange(), textRes);
+      MarkRewritten(call);
+    }
+    return true;
+  }
 
 private:
   Rewriter& m_rewriter;
@@ -248,8 +249,7 @@ int main(int argc, char *argv[])
 
   // At this point the rewriter's buffer should be full with the rewritten
   // file contents.
-  const RewriteBuffer *RewriteBuf =
-      TheRewriter.getRewriteBufferFor(SourceMgr.getMainFileID());
+  const RewriteBuffer *RewriteBuf = TheRewriter.getRewriteBufferFor(SourceMgr.getMainFileID());
   llvm::outs() << std::string(RewriteBuf->begin(), RewriteBuf->end());
 
   return 0;

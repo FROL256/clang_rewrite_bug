@@ -19,18 +19,23 @@ struct complex
   float re, im;
 };
 
-float test() 
-{  
-  complex a = complex(1.0f, 2.0f);
-  complex b = complex(3.0f, 4.0f);
-  complex c = a + b/2.0f;
-  complex d = a + b/complex(2.0f);
-  complex e = a + 2.0f/b;
-  complex f = a + 2.0f/complex(b);
-  return c.re + c.im;
-}
+//float test() 
+//{  
+//  complex a = complex(1.0f, 2.0f);
+//  complex b = complex(3.0f, 4.0f);
+//  complex c = a + b/2.0f;
+//  complex d = a + b/complex(2.0f);
+//  complex e = a + 2.0f/b;
+//  complex f = a + 2.0f/complex(b);
+//  return c.re + c.im;
+//}
 
-complex test2(complex cosTheta, complex eta, float thickness, float lambda)
+complex test_bug(complex cosTheta, complex eta, float lambda)
 {
   return cosTheta + eta/lambda;
+}
+
+complex test_ok(complex cosTheta, complex eta, float lambda)
+{
+  return cosTheta + eta/complex(lambda);
 }
