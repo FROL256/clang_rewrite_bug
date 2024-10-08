@@ -61,6 +61,20 @@ const clang::Expr* RemoveImplicitCast(const clang::Expr* nextNode)
   return nextNode;
 }
 
+class NodesMarker : public RecursiveASTVisitor<NodesMarker> // mark all subsequent nodes to be rewritten, put their ash codes in 'rewrittenNodes'
+{
+public:
+  NodesMarker(std::unordered_set<uint64_t>& a_rewrittenNodes) : m_rewrittenNodes(a_rewrittenNodes){}
+  bool VisitStmt(Stmt* expr)
+  {
+    auto hash = GetHashOfSourceRange(expr->getSourceRange());
+    m_rewrittenNodes.insert(hash);
+    return true;
+  }
+private:
+  std::unordered_set<uint64_t>& m_rewrittenNodes;
+};
+
 // By implementing RecursiveASTVisitor, we can specify which AST nodes
 // we're interested in by overriding relevant methods.
 class MyASTVisitor : public RecursiveASTVisitor<MyASTVisitor> {
@@ -69,8 +83,6 @@ public:
   
   std::string RecursiveRewrite(const clang::Stmt* expr)
   {
-    if(expr == nullptr)
-      return "";
     MyASTVisitor rvCopy = *this;
     rvCopy.TraverseStmt(const_cast<clang::Stmt*>(expr));
     return m_rewriter.getRewrittenText(expr->getSourceRange());
@@ -105,7 +117,7 @@ public:
       }
 
       m_rewriter.ReplaceText(node->getSourceRange(), rewrittenOp);
-      MarkRewritten(node->getSourceRange());
+      MarkRewritten(node);
     }
 
     return true;
@@ -120,9 +132,10 @@ private:
     return (m_rewrittenNodes.find(GetHashOfSourceRange(a_range)) == m_rewrittenNodes.end()); 
   }
 
-  void  MarkRewritten(const clang::SourceRange a_range)
+  void MarkRewritten(const clang::Stmt* node)
   {
-    m_rewrittenNodes.insert(GetHashOfSourceRange(a_range));
+    NodesMarker rv(m_rewrittenNodes); 
+    rv.TraverseStmt(const_cast<clang::Stmt*>(node));
   }
 };
 
