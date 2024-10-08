@@ -49,17 +49,17 @@ uint64_t GetHashOfSourceRange(const clang::SourceRange& a_range)
   return (uint64_t(hash1) << 32) | uint64_t(hash2);
 }
 
-const clang::Expr* RemoveImplicitCast(const clang::Expr* nextNode)
-{
-  if(nextNode == nullptr)
-    return nullptr;
-  while(clang::isa<clang::ImplicitCastExpr>(nextNode))
-  {
-    auto cast = dyn_cast<clang::ImplicitCastExpr>(nextNode);
-    nextNode  = cast->getSubExpr();
-  }
-  return nextNode;
-}
+//const clang::Expr* RemoveImplicitCast(const clang::Expr* nextNode)
+//{
+//  if(nextNode == nullptr)
+//    return nullptr;
+//  while(clang::isa<clang::ImplicitCastExpr>(nextNode))
+//  {
+//    auto cast = dyn_cast<clang::ImplicitCastExpr>(nextNode);
+//    nextNode  = cast->getSubExpr();
+//  }
+//  return nextNode;
+//}
 
 class NodesMarker : public RecursiveASTVisitor<NodesMarker> // mark all subsequent nodes to be rewritten, put their ash codes in 'rewrittenNodes'
 {
@@ -96,8 +96,8 @@ public:
     const std::string op = clang::getOperatorSpelling(opKind);
     if((op == "+" || op == "-" || op == "*" || op == "/") && WasNotRewrittenYet(node->getSourceRange()))
     {
-      const clang::Expr* left  = RemoveImplicitCast(node->getArg(0));
-      const clang::Expr* right = RemoveImplicitCast(node->getArg(1));
+      const clang::Expr* left  = node->getArg(0); //RemoveImplicitCast(node->getArg(0));
+      const clang::Expr* right = node->getArg(1); //RemoveImplicitCast(node->getArg(1));
 
       const std::string leftType  = left->getType().getAsString();
       const std::string rightType = right->getType().getAsString();

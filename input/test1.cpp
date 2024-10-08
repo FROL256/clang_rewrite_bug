@@ -29,3 +29,8 @@ float test()
   complex f = a + 2.0f/complex(b);
   return c.re + c.im;
 }
+
+static inline complex filmPhaseDiff(complex cosTheta, complex eta, float thickness, float lambda)
+{
+  return 4 * 3.1415926535f * eta * cosTheta * thickness / lambda;
+}
