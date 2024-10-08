@@ -49,17 +49,18 @@ uint64_t GetHashOfSourceRange(const clang::SourceRange& a_range)
   return (uint64_t(hash1) << 32) | uint64_t(hash2);
 }
 
-//const clang::Expr* RemoveImplicitCast(const clang::Expr* nextNode)
-//{
-//  if(nextNode == nullptr)
-//    return nullptr;
-//  while(clang::isa<clang::ImplicitCastExpr>(nextNode))
-//  {
-//    auto cast = dyn_cast<clang::ImplicitCastExpr>(nextNode);
-//    nextNode  = cast->getSubExpr();
-//  }
-//  return nextNode;
-//}
+const clang::Expr* RemoveImplicitCast(const clang::Expr* nextNode)
+{
+  if(nextNode == nullptr)
+    return nullptr;
+  while(clang::isa<clang::ImplicitCastExpr>(nextNode))
+  {
+    auto cast = dyn_cast<clang::ImplicitCastExpr>(nextNode);
+    nextNode  = cast->getSubExpr();
+  }
+  return nextNode;
+}
+
 
 class NodesMarker : public RecursiveASTVisitor<NodesMarker> // mark all subsequent nodes to be rewritten, put their ash codes in 'rewrittenNodes'
 {
@@ -88,24 +89,36 @@ public:
     return m_rewriter.getRewrittenText(expr->getSourceRange());
   }
 
+  std::string FunctionCallRewriteNoName(const clang::CXXConstructExpr* call)
+  {
+    std::string textRes = "(";
+    for(unsigned i=0;i<call->getNumArgs();i++)
+    {
+      textRes += RecursiveRewrite(RemoveImplicitCast(call->getArg(i)));
+      if(i < call->getNumArgs()-1)
+        textRes += ",";
+    }
+    return textRes + ")";
+  }
+
   bool VisitCXXOperatorCallExpr(clang::CXXOperatorCallExpr* node)
   {
     static std::unordered_map<std::string, std::string> remapOp = {{"+","add"}, {"-","sub"}, {"*","mul"}, {"/","div"}};
-
+  
     auto opKind = node->getOperator();
     const std::string op = clang::getOperatorSpelling(opKind);
     if((op == "+" || op == "-" || op == "*" || op == "/") && WasNotRewrittenYet(node->getSourceRange()))
     {
-      const clang::Expr* left  = node->getArg(0); //RemoveImplicitCast(node->getArg(0));
-      const clang::Expr* right = node->getArg(1); //RemoveImplicitCast(node->getArg(1));
-
+      const clang::Expr* left  = RemoveImplicitCast(node->getArg(0));
+      const clang::Expr* right = RemoveImplicitCast(node->getArg(1));
+  
       const std::string leftType  = left->getType().getAsString();
       const std::string rightType = right->getType().getAsString();
       const std::string keyType   = "complex"; 
       
       const std::string leftText  = RecursiveRewrite(left);
       const std::string rightText = RecursiveRewrite(right);
-
+  
       std::string rewrittenOp;
       {
         if(leftType == keyType && rightType == keyType)
@@ -115,13 +128,26 @@ public:
         else if(rightType == keyType)
           rewrittenOp =  "real_" + remapOp[op] + "_" + keyType + "(" + leftText + "," + rightText + ")";
       }
-
+  
       m_rewriter.ReplaceText(node->getSourceRange(), rewrittenOp);
       MarkRewritten(node);
     }
-
+  
     return true;
   }
+
+  //bool VisitCXXConstructExpr(CXXConstructExpr* call)
+  //{
+  //  const clang::CXXConstructorDecl* ctorDecl = call->getConstructor();
+  //  const std::string fname = ctorDecl->getNameInfo().getName().getAsString();
+  //  
+  //  if(WasNotRewrittenYet(call->getSourceRange()))
+  //  {
+  //    std::string textRes = "to_complex" + FunctionCallRewriteNoName(call); 
+  //    m_rewriter.ReplaceText(call->getSourceRange(), textRes);
+  //    MarkRewritten(call);
+  //  }
+  //}
 
 private:
   Rewriter& m_rewriter;
