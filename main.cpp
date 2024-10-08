@@ -147,6 +147,7 @@ public:
   //    m_rewriter.ReplaceText(call->getSourceRange(), textRes);
   //    MarkRewritten(call);
   //  }
+  //  return true;
   //}
 
 private:
