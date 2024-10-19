@@ -86,11 +86,19 @@ public:
   {
     MyASTVisitor rvCopy = *this;
     rvCopy.TraverseStmt(const_cast<clang::Stmt*>(expr));
-    return m_rewriter.getRewrittenText(expr->getSourceRange());
+    std::string textOri = GetOriginalText(expr->getSourceRange());
+    if(textOri == "lambda")
+    {
+      int a = 2;
+    }
+    auto srcRangeRes = expr->getSourceRange();
+    std::string textRes = m_rewriter.getRewrittenText(srcRangeRes);
+    return textRes;
   }
 
   std::string FunctionCallRewriteNoName(const clang::CXXConstructExpr* call)
   {
+    std::string textOri = GetOriginalText(call->getSourceRange());
     std::string textRes = "(";
     for(unsigned i=0;i<call->getNumArgs();i++)
     {
@@ -118,18 +126,20 @@ public:
       
       const std::string leftText  = RecursiveRewrite(left);
       const std::string rightText = RecursiveRewrite(right);
-  
-      std::string rewrittenOp;
+      
+      std::string textOri = GetOriginalText(node->getSourceRange());
+      std::string textRes;
       {
         if(leftType == keyType && rightType == keyType)
-          rewrittenOp = keyType + "_" + remapOp[op] + "(" + leftText + "," + rightText + ")";
+          textRes = keyType + "_" + remapOp[op] + "(" + leftText + "," + rightText + ")";
         else if (leftType == keyType)
-          rewrittenOp = keyType + "_" + remapOp[op] + "_real(" + leftText + "," + rightText + ")";
+          textRes = keyType + "_" + remapOp[op] + "_real(" + leftText + "," + rightText + ")";
         else if(rightType == keyType)
-          rewrittenOp =  "real_" + remapOp[op] + "_" + keyType + "(" + leftText + "," + rightText + ")";
+          textRes =  "real_" + remapOp[op] + "_" + keyType + "(" + leftText + "," + rightText + ")";
       }
   
-      m_rewriter.ReplaceText(node->getSourceRange(), rewrittenOp);
+      m_rewriter.ReplaceText(node->getSourceRange(), textRes);
+      std::string textRes2 = m_rewriter.getRewrittenText(node->getSourceRange());
       MarkRewritten(node);
     }
   
@@ -142,10 +152,14 @@ public:
     const clang::CXXConstructorDecl* ctorDecl = call->getConstructor();
     const std::string fname = ctorDecl->getNameInfo().getName().getAsString();
     
-    if(WasNotRewrittenYet(call->getSourceRange()))
+    auto range = call->getSourceRange();
+
+    if(WasNotRewrittenYet(range))
     {
+      std::string textOri = GetOriginalText(range);
       std::string textRes = "to_complex" + FunctionCallRewriteNoName(call); 
-      m_rewriter.ReplaceText(call->getSourceRange(), textRes);
+      m_rewriter.ReplaceText(range, textRes);
+      std::string textRes2 = m_rewriter.getRewrittenText(range);
       MarkRewritten(call);
     }
     return true;
