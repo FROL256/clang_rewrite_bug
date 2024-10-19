@@ -175,7 +175,7 @@ public:
 
   // Override the method that gets called for each parsed top-level
   // declaration.
-  virtual bool HandleTopLevelDecl(DeclGroupRef DR) {
+  virtual bool HandleTopLevelDecl(DeclGroupRef DR) override {
     for (DeclGroupRef::iterator b = DR.begin(), e = DR.end(); b != e; ++b)
       // Traverse the declaration using our AST visitor.
       Visitor.TraverseDecl(*b);
@@ -219,7 +219,7 @@ int main(int argc, char *argv[])
   SourceManager& SourceMgr = compiler.getSourceManager();
   g_pSM = &SourceMgr;
 
-  compiler.createPreprocessor(TU_Module);
+  compiler.createPreprocessor(TU_ClangModule);
   compiler.createASTContext();
 
   // A Rewriter helps us manage the code rewriting task.
@@ -227,15 +227,16 @@ int main(int argc, char *argv[])
   TheRewriter.setSourceMgr(SourceMgr, compiler.getLangOpts());
 
   // Set the main file handled by the source manager to the input file.
-  auto fileOrErr = FileMgr.getFile(argv[1], "-std=c++11");
+  auto fileOrErr = FileMgr.getFileRef(argv[1], "-std=c++11");
 
-  if (std::error_code ec = fileOrErr.getError()) 
+  if (auto ec = fileOrErr.takeError()) 
   {
-    std::cout << "[main.cpp]: can't open file: " << ec.message() << std::endl;
+    std::cout << "[main.cpp]: can't open file: " << argv[1] << std::endl;
     return 0;
   }
 
-  const FileEntry* FileIn = *fileOrErr;
+  //const FileEntry* FileIn = *fileOrErr;
+  const FileEntryRef FileIn = fileOrErr.get();
   SourceMgr.setMainFileID(SourceMgr.createFileID(FileIn, SourceLocation(), SrcMgr::C_User));
   compiler.getDiagnosticClient().BeginSourceFile(compiler.getLangOpts(), &compiler.getPreprocessor());
 
