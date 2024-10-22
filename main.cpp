@@ -84,9 +84,18 @@ public:
   
   std::string RecursiveRewrite(const clang::Stmt* expr)
   {
+    auto range = expr->getSourceRange();
+
     MyASTVisitor rvCopy = *this;
     rvCopy.TraverseStmt(const_cast<clang::Stmt*>(expr));
-    return m_rewriter.getRewrittenText(expr->getSourceRange());
+
+    this->m_rewrittenNodes = rvCopy.m_rewrittenNodes;
+
+    auto p = rvCopy.m_workAround.find(GetHashOfSourceRange(range));
+    if(p != rvCopy.m_workAround.end())
+      return p->second;
+    else
+      return m_rewriter.getRewrittenText(expr->getSourceRange());
   }
 
   std::string FunctionCallRewriteNoName(const clang::CXXConstructExpr* call)
@@ -142,18 +151,25 @@ public:
     const clang::CXXConstructorDecl* ctorDecl = call->getConstructor();
     const std::string fname = ctorDecl->getNameInfo().getName().getAsString();
     
-    if(WasNotRewrittenYet(call->getSourceRange()))
+    auto range = call->getSourceRange();
+    std::string textOri = GetOriginalText(range);
+
+    if(WasNotRewrittenYet(range))
     {
       std::string textRes = "to_complex" + FunctionCallRewriteNoName(call); 
-      m_rewriter.ReplaceText(call->getSourceRange(), textRes);
+      if(range.getBegin().getRawEncoding() == range.getEnd().getRawEncoding())
+        m_workAround[GetHashOfSourceRange(range)] = textRes;
+      else
+        m_rewriter.ReplaceText(range, textRes);
       MarkRewritten(call);
     }
     return true;
   }
 
-private:
+//private:
   Rewriter& m_rewriter;
   std::unordered_set<uint64_t> m_rewrittenNodes;
+  std::unordered_map<uint64_t, std::string> m_workAround;
 
   bool WasNotRewrittenYet(const clang::SourceRange a_range) 
   { 
