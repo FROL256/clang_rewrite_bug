@@ -88,8 +88,7 @@ public:
 
     MyASTVisitor rvCopy = *this;
     rvCopy.TraverseStmt(const_cast<clang::Stmt*>(expr));
-
-    this->m_rewrittenNodes = rvCopy.m_rewrittenNodes;
+    //this->m_rewrittenNodes = rvCopy.m_rewrittenNodes;
 
     auto p = rvCopy.m_workAround.find(GetHashOfSourceRange(range));
     if(p != rvCopy.m_workAround.end())
